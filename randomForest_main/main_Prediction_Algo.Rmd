@@ -1,0 +1,62 @@
+
+
+```{r}
+#tidying ad_org_test for model to predict
+explanatories <- ad_org_test
+#Remove extra charactor
+explanatories$duration <- sub(pattern = "PT", replacement = "", x = explanatories$duration)
+#Hour
+explanatories$hour <- sub(pattern = "([0-9]+)H.*$","\\1", x = explanatories$duration)
+explanatories$hour <- as.integer(explanatories$hour)
+#Minut
+#1 remove Hours
+explanatories$minuts <- sub(pattern = ".*([0-9]+)H","", x = explanatories$duration)
+explanatories$sec <- sub(pattern = ".*([0-9]+)M","", x = explanatories$minuts)
+#Get Minuts
+explanatories$minuts <- sub(pattern = "([0-9]+)M.*$","\\1", x = explanatories$minuts)
+explanatories$minuts <- as.integer(explanatories$minuts)
+#Get seconds
+explanatories$sec <- sub(pattern = "([0-9]+)S","\\1", x = explanatories$sec)
+explanatories$sec <- as.integer(explanatories$sec)
+explanatories[is.na(explanatories)] <- 0
+
+
+sum(is.na(explanatories$views))
+sum(is.na(explanatories$likes))
+sum(is.na(explanatories$dislikes))
+sum(is.na(explanatories$comment))
+sum(is.na(explanatories$category))
+
+#minlen
+explanatories <- explanatories %>% mutate(minlen = round(((hour*3600)+(minuts*60)+(sec))/60,2)) %>% select(-minuts, -hour, -sec, -duration, -published)
+
+#chage the classes of likes dislike and comment as numeric & category
+explanatories$category <- as.factor(explanatories$category)
+explanatories$comment <- round(as.numeric(explanatories$comment),0)
+explanatories$likes <- round(as.numeric(explanatories$likes),0)
+explanatories$dislikes <- round(as.numeric(explanatories$dislikes),0)
+
+#raios View vs likes dislikes and comments
+explanatories$likesratio <- as.integer(round((explanatories$views / explanatories$likes),0))
+explanatories$dislikesratio <- as.integer(round((explanatories$views / explanatories$dislikes),0))
+explanatories$commentratio <- as.integer(round((explanatories$views / explanatories$comment),0))
+explanatories[is.na(explanatories)] <- 0
+```
+
+
+```{r}
+library(randomForest)
+ad[is.na(ad)] <- 0
+#randomForest training
+rdat_model <- randomForest(formula = adview ~., data = ad)
+#Prediction
+ad_view <- predict(object = rdat_model, newdata = explanatories, type = "class")         
+explanatories$ad_view <- round(ad_view,0)
+adview_predicted <- explanatories %>% select(vidid,ad_view)
+adview_predicted <- rename(adview_predicted, vid_id = vidid)
+# Write CSV in R
+write.csv(adview_predicted, file = "ad_view_predicted.csv")
+```
+
+
+
