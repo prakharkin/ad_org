@@ -1,0 +1,102 @@
+Random Forest
+```{r}
+rdat <- ad
+#rdat$adview <- as.factor(rdat$adview)  
+#[1] 7.746849 rmse when as.factor was used 
+#with hyper-parameters calculated from chunk:4's RMSE 7.774169
+#optimum calculated hyperparameters from chunck:4 mtry = 4, nodesize = 7, sampsize = 7670.4
+rdat[is.na(rdat)] <- 0
+set.seed(1)
+assignment <- sample(1:2, size = nrow(rdat), prob = c(0.8, 0.2), replace = TRUE)
+
+#B. Create a train, tests from the original data frame 
+rdat_train <- rdat[assignment == 1, ]  # subset rdat to training indices only
+rdat_test <- rdat[assignment == 2, ]  # subset rdat to validation indices only   
+
+#install.packages("randomForest")
+library(randomForest)
+set.seed(1)  # for reproducibility
+
+#rdat_model <- randomForest(formula = adview ~ views + likes + dislikes + comment + minlen, data = rdat_train) #>>>> (RMSE 6.7437)
+
+rdat_model <- randomForest(formula = adview ~., data = rdat_train) 
+#>>>>> (RMSE 6.694919) the best model output 6.690659 >>> RMSE "6.69"
+
+
+
+#Print the model output              
+#print(rdat_model)
+
+
+
+# Generate predicted classes using the model object
+pred <- predict(object = rdat_model, newdata = rdat_test, type = "class")         
+
+library(ModelMetrics)
+rmse(actual = rdat_test$adview, 
+     predicted = pred)
+
+```
+
+OOB when adview is.factor TRUE
+```{r}
+#Please remove "#"-to make adview as factor-from line 4 and process the model again
+# Grab OOB error matrix & take a look OUT-OF-THE-BAG
+err <- rdat_model$err.rate
+head(err)
+# Look at final OOB error rate (last row in err matrix)
+oob_err <- err[nrow(err), "OOB"]
+print(oob_err)
+# Plot the model trained in the previous exercise
+plot(rdat_model)
+
+```
+
+Tuning
+```{r}
+# Execute the tuning process
+set.seed(1)              
+res <- tuneRF(x = subset(rdat_train, select = -adview),
+              y = rdat_train$adview,
+              ntreeTry = 500)
+               
+# Look at results
+print(res)
+
+# Find the mtry value that minimizes OOB Error
+mtry_opt <- res[,"mtry"][which.min(res[,"OOBError"])]
+print(mtry_opt)
+```
+Calculating the best Hyper-parameters for the randomForest model- run time 22-30 min.
+```{r}
+#tree depth and all hyperparameter
+# Establish a list of possible values for mtry, nodesize and sampsize
+mtry <- seq(4, ncol(rdat_train) * 0.8, 2)
+nodesize <- seq(3, 8, 2)
+sampsize <- nrow(rdat_train) * c(0.7, 0.8)
+
+# Create a data frame containing all combinations 
+hyper_grid <- expand.grid(mtry = mtry, nodesize = nodesize, sampsize = sampsize)
+
+# Create an empty vector to store OOB error values
+oob_err <- c()
+
+# Write a loop over the rows of hyper_grid to train the grid of models
+for (i in 1:nrow(hyper_grid)) {
+
+    # Train a Random Forest model
+    model <- randomForest(formula = adview ~ ., 
+                          data = rdat_train,
+                          mtry = hyper_grid$mtry[i],
+                          nodesize = hyper_grid$nodesize[i],
+                          sampsize = hyper_grid$sampsize[i])
+                          
+    # Store OOB error for the model                      
+    oob_err[i] <- model$err.rate[nrow(model$err.rate), "OOB"]
+}
+
+# Identify optimal set of hyperparmeters based on OOB error
+opt_i <- which.min(oob_err)
+print(hyper_grid[opt_i,])
+```
+

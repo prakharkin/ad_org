@@ -1,0 +1,149 @@
+
+1. Data Cleaning for Tree Regression
+2. Split the data for the model
+
+```{r}
+#ad$adview <- as.factor(ad$adview)
+#A. Split
+#1. set seed
+set.seed(1)
+#2. assignment of data
+assignment <- sample(1:2, size = nrow(ad), prob = c(0.8, 0.2), replace = TRUE)
+
+#B. Create a train, validation and tests from the original data frame 
+ad_train <- ad[assignment == 1, ]  # subset ad to training indices only
+#ad_valid <- ad[assignment == 2, ]  # subset ad to validation indices only
+ad_test <- ad[assignment == 2, ]   # subset ad to test indices only
+```
+
+
+3. Simple Model
+```{r}
+#install.packages("rpart")
+library("rpart")
+# Train the model
+ad_model <- rpart(formula = adview ~ ., 
+                     data = ad_train, 
+                     method = "anova")
+
+# Look at the model output                      
+print(ad_model)
+
+# Plot the tree model
+#rpart.plot::rpart.plot(x = ad_model, yesno = 2, type = 0, extra = 0)
+# Generate predictions on a test set
+pred <- predict(object = ad_model,  newdata = ad_test)   # model object # test dataset
+
+# Compute the RMSE
+#install.packages("ModelMetrics")
+library(ModelMetrics)
+rmse(actual = ad_test$adview, 
+     predicted = pred)
+rmse(actual = ad_test$adview, 
+     predicted = round(pred,0))
+#Annova RMSE OUTPUT>>>>>> 6.835526 / rounded value 6.840277
+```
+
+Model Optimization
+
+```{r}
+# Plot the "CP Table"
+plotcp(ad_model)
+
+# Print the "CP Table"
+print(ad_model$cptable)
+
+# Retrieve optimal cp value based on cross-validated error
+opt_index <- which.min(ad_model$cptable[, "xerror"])
+opt_index
+cp_opt <- ad_model$cptable[opt_index, "CP"]
+cp_opt
+# Prune the model (to optimized cp value)
+ad_model <- prune(tree = ad_model, 
+                         cp = cp_opt)
+#RMSE CHECK
+pred <- predict(object = ad_model,  newdata = ad_test)
+rmse(actual = ad_test$adview, 
+     predicted = pred)
+
+```
+
+Model Optimization  GRID SEARCH
+```{r}
+# Establish a list of possible values for minsplit and maxdepth
+minsplit <- seq(1, 30, 1)
+maxdepth <- seq(1, 30, 1)
+
+# Create a data frame containing all combinations 
+hyper_grid <- expand.grid(minsplit = minsplit, maxdepth = maxdepth)
+
+# Check out the grid
+head(hyper_grid)
+
+# Print the number of grid combinations
+nrow(hyper_grid)
+
+
+# Number of potential models in the grid
+num_models <- nrow(hyper_grid)
+
+# Create an empty list to store models
+ad_models <- list()
+
+# Write a loop over the rows of hyper_grid to train the grid of models
+for (i in 1:num_models) {
+
+    # Get minsplit, maxdepth values at row i
+    minsplit <- hyper_grid$minsplit[i]
+    maxdepth <- hyper_grid$maxdepth[i]
+
+    # Train a model and store in the list
+    ad_models[[i]] <- rpart(formula = adview ~ ., 
+                               data = ad_train, 
+                               method = "anova",
+                               minsplit = minsplit,
+                               maxdepth = maxdepth)
+
+}
+
+
+
+# Number of potential models in the grid
+num_models <- length(ad_models)
+
+# Create an empty vector to store RMSE values
+rmse_values <- c()
+
+# Write a loop over the models to compute validation RMSE
+for (i in 1:num_models) {
+
+    # Retrieve the i^th model from the list
+    model <- ad_models[[i]]
+    
+    # Generate predictions on grade_valid 
+    pred <- predict(object = model,
+                    newdata = ad_test)
+    
+    # Compute validation RMSE and add to the 
+    rmse_values[i] <- rmse(actual = ad_test$adview, 
+                           predicted = pred)
+}
+
+# Identify the model with smallest validation set RMSE
+best_model <- ad_models[[which.min(rmse_values)]]
+
+# Print the model paramters of the best model
+best_model$control
+
+# Compute test set RMSE on best_model  
+pred <- predict(object = best_model,
+                newdata = ad_test)
+rmse(actual = ad_test$adview, 
+     predicted = pred)
+# RMSE 6.835526 is slightly better than traditional tree's rmse by 1 value(10th desimal place)
+
+#RANDOMFOREST performed better than rpart's Tree Model, RANDOMFOREST is the better approach
+
+
+```
+
